@@ -1,79 +1,79 @@
-# main.py
 import sys
-import jieba
 
-def get_simhash(text: str, hash_bits=64) -> int:
+def simhash(text):
     """
-    计算文本simhash指纹
-    :param text: 原始文本
-    :param hash_bits: 指纹位数，默认64位
-    :return: simhash整数值
+    对输入中文文本生成64位simhash指纹
+    :param text: 原始输入文本字符串
+    :return: 64bit整数指纹
     """
-    # 分词
-    words = jieba.lcut(text)
-    # 初始化向量
-    v = [0] * hash_bits
+    # 清洗中文标点
+    words = text.replace("，", " ").replace("。", " ").replace("；", " ").replace("：", " ").split()
+    v = [0] * 64
     for word in words:
         h = hash(word)
-        for i in range(hash_bits):
+        for i in range(64):
             bit = (h >> i) & 1
-            if bit:
+            if bit == 1:
                 v[i] += 1
             else:
                 v[i] -= 1
-    # 生成指纹
     fingerprint = 0
-    for i in range(hash_bits):
+    for i in range(64):
         if v[i] > 0:
             fingerprint |= (1 << i)
     return fingerprint
 
-def hamming_distance(hash1: int, hash2: int) -> int:
-    """计算两个64位哈希的海明距离"""
-    return bin(hash1 ^ hash2).count("1")
+def hamming_distance(h1, h2):
+    """计算两个指纹的海明距离"""
+    xor = h1 ^ h2
+    return bin(xor).count("1")
 
-def calc_similarity(hamming_dist: int, bits=64) -> float:
-    """根据海明距离计算相似度（0~1），保留两位小数"""
-    sim = 1 - hamming_dist / bits
-    return round(sim, 2)
-
-def read_file(file_path: str) -> str:
-    """读取文本文件，异常处理：文件不存在、编码错误"""
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        raise FileNotFoundError(f"文件不存在：{file_path}")
-    except UnicodeDecodeError:
-        raise Exception(f"文件编码错误，无法读取：{file_path}")
-
-def write_result(file_path: str, rate: float):
-    """把重复率写入结果文件"""
-    try:
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(f"{rate:.2f}")
-    except Exception as e:
-        raise Exception(f"写入文件失败：{str(e)}")
+def calc_similarity(d):
+    """由海明距离计算相似度百分比"""
+    return ((64 - d) / 64) * 100
 
 def main():
-    # 命令行参数校验
+    # 接收3个命令行参数：原文、抄袭文件、输出结果文件
     if len(sys.argv) != 4:
-        print("参数错误！使用方式：python main.py 原文路径 抄袭文件 输出文件")
-        sys.exit(1)
-    orig_path = sys.argv[1]
-    copy_path = sys.argv[2]
-    ans_path = sys.argv[3]
+        print("用法：python main.py 原文文件路径 抄袭文件路径 输出结果文件路径")
+        return
+
+    file_origin = sys.argv[1]
+    file_copy = sys.argv[2]
+    file_output = sys.argv[3]
+
+    # 捕获原文文件不存在异常
     try:
-        orig_text = read_file(orig_path)
-        copy_text = read_file(copy_path)
-        hash_orig = get_simhash(orig_text)
-        hash_copy = get_simhash(copy_text)
-        dist = hamming_distance(hash_orig, hash_copy)
-        repeat_rate = calc_similarity(dist)
-        write_result(ans_path, repeat_rate)
-    except Exception as e:
-        print(f"程序异常：{e}")
-        sys.exit(1)
+        with open(file_origin, "r", encoding="utf-8") as f:
+            text_origin = f.read().strip()
+    except FileNotFoundError:
+        print(f"错误：文件 {file_origin} 不存在！")
+        return
+    # 捕获抄袭文件不存在异常
+    try:
+        with open(file_copy, "r", encoding="utf-8") as f:
+            text_copy = f.read().strip()
+    except FileNotFoundError:
+        print(f"错误：文件 {file_copy} 不存在！")
+        return
+
+    # 判断文本全为空
+    if len(text_origin.strip()) == 0 or len(text_copy.strip()) == 0:
+        print("错误：文本内容不能为空！")
+        return
+
+    # 计算指纹、海明距离、重复率
+    f1 = simhash(text_origin)
+    f2 = simhash(text_copy)
+    dist = hamming_distance(f1, f2)
+    similarity = calc_similarity(dist)
+
+    # ✅核心：把重复率写入第三个输出文件，保留2位小数
+    with open(file_output, "w", encoding="utf-8") as out_f:
+        out_f.write(f"{similarity:.2f}")
+
+    print(f"海明距离：{dist}")
+    print(f"重复率：{similarity:.2f}%")
 
 if __name__ == "__main__":
     main()
